@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Temba's Tune Finder</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<meta name="theme-color" content="#4b3fe0">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+/* Layout: one centered column. Big listen button on top, result card below, settings tucked at the bottom. */
+:root {
+  --bg: #f4f5f8;
+  --surface: #ffffff;
+  --fg: #14162b;
+  --muted: #5d6179;
+  --line: #dcdfea;
+  --accent: #4b3fe0;
+  --accent-fg: #ffffff;
+  --ok: #167a4a;
+  --warn: #a15a00;
+  --bad: #b3261e;
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1020; --surface: #181a30; --fg: #eceefb; --muted: #9ea2c0; --line: #2a2d4a;
+    --accent: #8f86ff; --accent-fg: #0f1020; --ok: #5ed39a; --warn: #f0b45a; --bad: #ff8a80;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1020; --surface: #181a30; --fg: #eceefb; --muted: #9ea2c0; --line: #2a2d4a;
+  --accent: #8f86ff; --accent-fg: #0f1020; --ok: #5ed39a; --warn: #f0b45a; --bad: #ff8a80;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 16px; line-height: 1.5;
+  padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+main { max-width: 520px; margin: 0 auto; display: grid; gap: 24px; }
+h1 { font-family: var(--font-display); font-size: 1.6rem; margin: 0; letter-spacing: -0.01em; }
+.sub { color: var(--muted); margin: 4px 0 0; }
+
+.stage { display: grid; justify-items: center; gap: 14px; padding: 12px 0 4px; }
+.listen {
+  position: relative; width: 168px; height: 168px; border-radius: 50%; border: 0; cursor: pointer;
+  background: var(--accent); color: var(--accent-fg);
+  font-family: var(--font-display); font-weight: 700; font-size: 1.25rem;
+}
+.listen:focus-visible { outline: 3px solid var(--fg); outline-offset: 4px; }
+.listen:disabled { cursor: default; }
+.listen .ring { position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--accent); opacity: 0; }
+.listen.on .ring { animation: pulse 1.6s ease-out infinite; }
+.listen.on .ring.r2 { animation-delay: .8s; }
+@keyframes pulse { 0% { transform: scale(1); opacity: .7; } 100% { transform: scale(1.55); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .listen.on .ring { animation: none; opacity: .5; } }
+.bar { width: min(260px, 100%); height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--accent); }
+.status { min-height: 1.5em; margin: 0; color: var(--muted); text-align: center; }
+.status.err { color: var(--bad); }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px; display: grid; gap: 14px; min-width: 0; }
+.card[hidden] { display: none; }
+.tag { font-size: .75rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--warn); }
+.title { font-family: var(--font-display); font-size: 1.5rem; line-height: 1.2; margin: 0; overflow-wrap: anywhere; }
+.artist { margin: 2px 0 0; color: var(--muted); overflow-wrap: anywhere; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { border: 1px solid var(--line); border-radius: 999px; padding: 3px 12px; font-size: .875rem; }
+.meta { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; font-size: .9rem; }
+.meta dt { color: var(--muted); }
+.meta dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+h2 { font-family: var(--font-display); font-size: 1rem; margin: 0; }
+.lyrics { white-space: pre-wrap; margin: 0; max-height: 320px; overflow: auto; font-family: var(--font-body); font-size: .95rem; padding: 12px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); }
+.note { color: var(--muted); font-size: .875rem; margin: 0; }
+a { color: var(--accent); }
+
+details { border-top: 1px solid var(--line); padding-top: 16px; }
+summary { cursor: pointer; font-weight: 600; }
+.settings { display: grid; gap: 14px; margin-top: 14px; }
+label { display: grid; gap: 6px; font-size: .9rem; }
+input[type="password"], input[type="text"] {
+  width: 100%; font: inherit; padding: 10px 12px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--fg);
+}
+input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.row { display: flex; align-items: center; gap: 10px; }
+.row input { width: 20px; height: 20px; accent-color: var(--accent); }
+button.small { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; justify-self: start; }
+button.small:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Temba's Tune Finder</h1>
+    <p class="sub">Play a song near your phone. Get the artist, genre and lyrics.</p>
+  </header>
+
+  <section class="stage" aria-label="Listen">
+    <button class="listen" id="listenBtn" type="button" aria-describedby="status">
+      <span class="ring"></span><span class="ring r2"></span>
+      <span id="listenLabel">Listen</span>
+    </button>
+    <div class="bar" aria-hidden="true"><i id="barFill"></i></div>
+    <p class="status" id="status" role="status" aria-live="polite">Tap Listen and hold the phone near the music.</p>
+  </section>
+
+  <section class="card" id="result" hidden aria-live="polite">
+    <div id="demoTag" class="tag" hidden>Demo result. Sample data, not a real match.</div>
+    <div>
+      <h2 class="title" id="rTitle"></h2>
+      <p class="artist" id="rArtist"></p>
+    </div>
+    <div class="chips" id="rGenres"></div>
+    <dl class="meta" id="rMeta"></dl>
+    <div>
+      <h2>Lyrics</h2>
+      <p class="note" id="lyricsNote">Looking up lyrics…</p>
+      <pre class="lyrics" id="rLyrics" hidden></pre>
+    </div>
+  </section>
+
+  <details id="settingsBox">
+    <summary>Settings</summary>
+    <div class="settings">
+      <label for="token">AudD API token
+        <input id="token" type="password" autocomplete="off" placeholder="Paste your token here">
+      </label>
+      <p class="note">Get a token at audd.io. It stays in this browser only and is sent only to AudD when you tap Listen.</p>
+      <div class="row">
+        <input id="demo" type="checkbox">
+        <label for="demo" style="display:inline">Demo mode (no microphone or token needed)</label>
+      </div>
+      <button class="small" id="saveBtn" type="button">Save settings</button>
+    </div>
+  </details>
+</main>
+
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("sw.js").catch(function () {});
+  });
+}
+(function () {
+  var RECORD_MS = 12000;
+  var AUDD_URL = "https://api.audd.io/";
+  var $ = function (id) { return document.getElementById(id); };
+  var btn = $("listenBtn"), label = $("listenLabel"), statusEl = $("status"), bar = $("barFill");
+  var busy = false;
+
+  function store(key, val) {
+    try { if (val === undefined) { return localStorage.getItem(key); } localStorage.setItem(key, val); } catch (e) { return null; }
+  }
+  function setStatus(msg, isErr) { statusEl.textContent = msg; statusEl.className = "status" + (isErr ? " err" : ""); }
+  function setBusy(on, text) {
+    busy = on; btn.disabled = on; btn.classList.toggle("on", on);
+    label.textContent = text || (on ? "Listening" : "Listen");
+    if (!on) { bar.style.width = "0"; }
+  }
+
+  $("token").value = store("tf_token") || "";
+  $("demo").checked = store("tf_demo") === "1";
+  $("saveBtn").addEventListener("click", function () {
+    store("tf_token", $("token").value.trim());
+    store("tf_demo", $("demo").checked ? "1" : "0");
+    setStatus("Settings saved.");
+  });
+
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  function animateBar(ms) {
+    var start = Date.now();
+    (function tick() {
+      if (!busy) { return; }
+      var p = Math.min(1, (Date.now() - start) / ms);
+      bar.style.width = (p * 100) + "%";
+      if (p < 1) { requestAnimationFrame(tick); }
+    })();
+  }
+
+  function recordClip(ms) {
+    return navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      return new Promise(function (resolve, reject) {
+        var chunks = [];
+        var rec;
+        try { rec = new MediaRecorder(stream); } catch (e) { stream.getTracks().forEach(function (t) { t.stop(); }); reject(e); return; }
+        rec.ondataavailable = function (e) { if (e.data && e.data.size) { chunks.push(e.data); } };
+        rec.onerror = function (e) { reject(e.error || new Error("Recording failed")); };
+        rec.onstop = function () {
+          stream.getTracks().forEach(function (t) { t.stop(); });
+          resolve(new Blob(chunks, { type: rec.mimeType || "audio/webm" }));
+        };
+        rec.start();
+        animateBar(ms);
+        setTimeout(function () { if (rec.state !== "inactive") { rec.stop(); } }, ms);
+      });
+    });
+  }
+
+  function extFor(type) { return /mp4|aac/.test(type) ? "m4a" : /ogg/.test(type) ? "ogg" : "webm"; }
+
+  function identify(blob, token) {
+    var fd = new FormData();
+    fd.append("api_token", token);
+    fd.append("return", "apple_music,spotify");
+    fd.append("file", blob, "clip." + extFor(blob.type));
+    return fetch(AUDD_URL, { method: "POST", body: fd }).then(function (res) { return res.json(); });
+  }
+
+  function genresFrom(r) {
+    var g = (r.apple_music && r.apple_music.genreNames) || [];
+    return g.filter(function (x) { return x && x !== "Music"; });
+  }
+
+  function showResult(info, demo) {
+    $("result").hidden = false;
+    $("demoTag").hidden = !demo;
+    $("rTitle").textContent = info.title;
+    $("rArtist").textContent = info.artist;
+    var chips = $("rGenres"); chips.textContent = "";
+    if (info.genres.length) {
+      info.genres.forEach(function (g) { var s = document.createElement("span"); s.className = "chip"; s.textContent = g; chips.appendChild(s); });
+    } else {
+      var n = document.createElement("span"); n.className = "note"; n.textContent = "Genre not provided for this song."; chips.appendChild(n);
+    }
+    var meta = $("rMeta"); meta.textContent = "";
+    [["Album", info.album], ["Released", info.date], ["Label", info.label]].forEach(function (p) {
+      if (!p[1]) { return; }
+      var dt = document.createElement("dt"), dd = document.createElement("dd");
+      dt.textContent = p[0]; dd.textContent = p[1]; meta.appendChild(dt); meta.appendChild(dd);
+    });
+    if (info.link && /^https:\/\//.test(info.link)) {
+      var dt2 = document.createElement("dt"), dd2 = document.createElement("dd"), a = document.createElement("a");
+      dt2.textContent = "Listen"; a.href = info.link; a.target = "_blank"; a.rel = "noopener"; a.textContent = "Open song page";
+      dd2.appendChild(a); meta.appendChild(dt2); meta.appendChild(dd2);
+    }
+    $("rLyrics").hidden = true; $("rLyrics").textContent = "";
+    if (info.lyrics) { showLyrics(info.lyrics); } else { loadLyrics(info.artist, info.title); }
+    $("result").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function showLyrics(text) {
+    $("lyricsNote").hidden = true;
+    $("rLyrics").hidden = false;
+    $("rLyrics").textContent = text;
+  }
+
+  function loadLyrics(artist, title) {
+    var note = $("lyricsNote"); note.hidden = false; note.textContent = "Looking up lyrics…";
+    var url = "https://api.lyrics.ovh/v1/" + encodeURIComponent(artist) + "/" + encodeURIComponent(title);
+    fetch(url).then(function (r) { return r.json(); }).then(function (d) {
+      if (d && d.lyrics) { showLyrics(d.lyrics.trim()); } else { throw new Error("none"); }
+    }).catch(function () {
+      note.textContent = "Lyrics were not found for this song.";
+    });
+  }
+
+  var DEMO = {
+    title: "Midnight Bus Home", artist: "The Lantern Fields", album: "Small Hours", date: "2024-03-08",
+    label: "Example Records", genres: ["Indie Pop", "Alternative"], link: "",
+    lyrics: "(Sample text written for this demo.)\n\nThe last bus hums along the river road,\nwindows fogged with everyone's warm breath.\nI trace a little star on the glass\nand count the lights between here and rest."
+  };
+
+  btn.addEventListener("click", function () {
+    if (busy) { return; }
+    var demo = $("demo").checked || store("tf_demo") === "1";
+    var token = (store("tf_token") || $("token").value || "").trim();
+
+    if (demo) {
+      setBusy(true); setStatus("Listening (demo)…"); animateBar(3000);
+      sleep(3000).then(function () { setBusy(false); setStatus("Demo match found."); showResult(DEMO, true); });
+      return;
+    }
+    if (!token) {
+      $("settingsBox").open = true;
+      setStatus("Add your AudD token in Settings, or switch on demo mode.", true);
+      return;
+    }
+    if (!navigator.mediaDevices || !window.MediaRecorder) {
+      setStatus("This page cannot use the microphone. Open it over https in Chrome or Safari.", true);
+      return;
+    }
+    setBusy(true); setStatus("Listening… keep the music playing.");
+    recordClip(RECORD_MS).then(function (blob) {
+      setBusy(true, "Matching"); setStatus("Matching your clip…");
+      return identify(blob, token);
+    }).then(function (data) {
+      setBusy(false);
+      if (data.status !== "success") {
+        var m = data.error && data.error.error_message;
+        setStatus(m ? "AudD said: " + m : "The recognition service returned an error.", true);
+        return;
+      }
+      var r = data.result;
+      if (!r) { setStatus("No match. Try again closer to the speaker, with less background noise."); return; }
+      setStatus("Match found.");
+      showResult({
+        title: r.title || "Unknown title", artist: r.artist || "Unknown artist", album: r.album || "",
+        date: r.release_date || "", label: r.label || "", genres: genresFrom(r), link: r.song_link || ""
+      }, false);
+    }).catch(function (err) {
+      setBusy(false);
+      var denied = err && (err.name === "NotAllowedError" || err.name === "SecurityError");
+      setStatus(denied ? "Microphone access was blocked. Allow it in your browser settings and try again."
+                       : "Something went wrong: " + (err && err.message ? err.message : "network error"), true);
+    });
+  });
+})();
+</script>
+</body>
+</html>
